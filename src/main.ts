@@ -1,3 +1,5 @@
+import "./style.css";
+
 // draw a circle in the middle of it
 // make sure that repositions in the center on resizes?
 
