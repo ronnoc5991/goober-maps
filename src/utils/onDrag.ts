@@ -1,21 +1,18 @@
 type DragDelta = { x: number; y: number };
 type MousePosition = { x: number; y: number };
 
-type Inactive = {
-  status: "inactive";
-};
-
-type DownButNotDragging = {
-  status: "down-but-not-dragging";
-  initialDownPosition: MousePosition;
-};
-
-type Dragging = {
-  status: "dragging";
-  prevDragPosition: MousePosition;
-};
-
-type MouseState = Inactive | DownButNotDragging | Dragging;
+type MouseState =
+  | {
+      status: "inactive";
+    }
+  | {
+      status: "down-but-not-dragging";
+      initialDownPosition: MousePosition;
+    }
+  | {
+      status: "dragging";
+      prevDragPosition: MousePosition;
+    };
 
 function onDrag({
   draggableElement,
