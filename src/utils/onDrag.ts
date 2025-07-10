@@ -14,6 +14,8 @@ type MouseState =
       prevDragPosition: MousePosition;
     };
 
+const INACTIVE: MouseState = { status: "inactive" };
+
 function onDrag({
   draggableElement,
   dragThreshold,
@@ -23,7 +25,7 @@ function onDrag({
   dragThreshold: number;
   callback: (delta: DragDelta) => void;
 }) {
-  let mouseState: MouseState = { status: "inactive" };
+  let mouseState: MouseState = INACTIVE;
 
   draggableElement.addEventListener("mousedown", (event) => {
     mouseState = {
@@ -33,11 +35,11 @@ function onDrag({
   });
 
   draggableElement.addEventListener("mouseup", () => {
-    mouseState = { status: "inactive" };
+    mouseState = INACTIVE;
   });
 
   draggableElement.addEventListener("mouseleave", () => {
-    mouseState = { status: "inactive" };
+    mouseState = INACTIVE;
   });
 
   draggableElement.addEventListener("mousemove", (event) => {
