@@ -3,6 +3,10 @@
 - add css reset
 - add zoom to the canvas
 
+- shift from drawing lines to drawing vertices
+- determine what vertices (in map units) should be visible
+- draw those vertices at the correct viewport coordinates
+
 - draw a grid on the canvas...
 - there needs to be an underlying coordinate system...
 - latitudes and longitudes
