@@ -1,25 +1,156 @@
 import onDrag from "./utils/onDrag";
 
 import "./style.css";
-
 // TODO: create a 'dev mode' that will draw the vertices for me and label them?
 
 // FINDINGS: drawing the images COULD work... might have to optimize if speed becomes an issue
 // NOTE: if a vertex is visible, all 4 images around it are necessary
 
+// (x - xmin) / (xmax - xmin)
+// (y - ymin) / (ymax - ymin)
+type Bounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+type Coordinates = { x: number; y: number };
+
+function normalizeCoordinates({
+  coordinates,
+  bounds,
+}: {
+  coordinates: Coordinates;
+  bounds: Bounds;
+}) {
+  return {
+    x: (coordinates.x - bounds.minX) / (bounds.maxX - bounds.minX),
+    y: (coordinates.y - bounds.minY) / (bounds.maxY - bounds.minY),
+  };
+}
+
+function viewportToWindowCoordinates({
+  viewportCoordinates,
+  viewportBounds,
+  windowBounds,
+}: {
+  viewportCoordinates: Coordinates;
+  viewportBounds: Bounds;
+  windowBounds: Bounds;
+}) {
+  const normalizedCoordinates = normalizeCoordinates({
+    coordinates: viewportCoordinates,
+    bounds: viewportBounds,
+  });
+
+  const windowCoordinates = normalizedToWindowCoordinates({
+    normalizedCoordinates,
+    windowBounds,
+  });
+
+  return windowCoordinates;
+}
+
+function windowToViewportCoordinates({
+  windowCoordinates,
+  windowBounds,
+  viewportBounds,
+}: {
+  windowCoordinates: Coordinates;
+  viewportBounds: Bounds;
+  windowBounds: Bounds;
+}) {
+  const normalizedCoordinates = normalizeCoordinates({
+    coordinates: windowCoordinates,
+    bounds: windowBounds,
+  });
+
+  const viewportCoordinates = normalizedToViewportCoordinates({
+    normalizedCoordinates,
+    viewportBounds,
+  });
+
+  return viewportCoordinates;
+}
+
+function normalizedToViewportCoordinates({
+  normalizedCoordinates,
+  viewportBounds,
+}: {
+  normalizedCoordinates: { x: number; y: number };
+  viewportBounds: Bounds;
+}) {
+  return {
+    x: normalizedCoordinates.x * (viewportBounds.maxX - viewportBounds.minX),
+    y: normalizedCoordinates.y * (viewportBounds.maxY - viewportBounds.minY),
+  };
+}
+
+function normalizedToWindowCoordinates({
+  normalizedCoordinates,
+  windowBounds,
+}: {
+  normalizedCoordinates: { x: number; y: number };
+  windowBounds: Bounds;
+}) {
+  return {
+    x: normalizedCoordinates.x * (windowBounds.maxX - windowBounds.minX),
+    y: normalizedCoordinates.y * (windowBounds.maxY - windowBounds.minY),
+  };
+}
+
+const SCALE_FACTOR = 1;
+// multiply the pixels
+// 1000px / 1 = 1000 (this is as zoomed in as we get?)
+// 1000px / 2 = 500 (things are half as big as they are in real life)
+
+// I want to draw the window onto the viewport...
+// I know the viewport's dimensions
+// I know where I want to 'focus' on the map (coordinates)
+
+// given a point to focus on, the viewport's dimensions and a zoom level (scale viewport units to map units?)
+// if I have 1000 viewport pixels and I want to show 1000 map units, the scale is 1:1?
+// how many px are used per map unit?
+// how many map units per px? (1 = 1:1 scale) (10 = 1:10 scale?)
+
+// I have a focal point...
+// how does translation (dragging) work with this stuff?
+
+function computeViewportBounds() {
+  const { offsetWidth: viewportWidth, offsetHeight: viewportHeight } =
+    canvasElement;
+
+  return {
+    minX: 0,
+    maxX: viewportWidth,
+    minY: 0,
+    maxY: viewportHeight,
+  };
+}
+
+function computeWindowBounds() {
+  const { offsetWidth: viewportWidth, offsetHeight: viewportHeight } =
+    canvasElement;
+
+  const windowWidth = viewportWidth / SCALE_FACTOR;
+  const windowHeight = viewportHeight / SCALE_FACTOR;
+
+  return {
+    minX: focalPoint.x - windowWidth / 2,
+    maxX: focalPoint.x + windowWidth / 2,
+    minY: focalPoint.y - windowHeight / 2,
+    maxY: focalPoint.y + windowHeight / 2,
+  };
+}
+
 // important to note: this is in viewport units
-function drawVertex(x: number, y: number) {
-  const { offsetWidth, offsetHeight } = canvasElement;
-
+function drawVertex(coordinates: Coordinates, label?: string) {
   drawingContext.beginPath();
-  // these do not take the focal point into account...
-  // map unit x, offset by the canvas width, but also take the focal point into account?
-  const translatedX = x + offsetWidth / 2 + focalPoint.x;
-  const translatedY = y + offsetHeight / 2 + focalPoint.y;
-
-  drawingContext.arc(translatedX, translatedY, 2, 0, 2 * Math.PI);
+  drawingContext.arc(coordinates.x, coordinates.y, 2, 0, 2 * Math.PI);
   drawingContext.stroke();
-  drawingContext.fillText(`(${x}, ${y})`, translatedX + 3, translatedY - 3);
+  if (!label) return;
+  drawingContext.fillText(label, coordinates.x + 3, coordinates.y);
 }
 
 // HOW DO YOU KNOW WHAT IS VISIBLE?
@@ -59,9 +190,8 @@ drawingContext.font = "bold italic 8px Arial";
 const focalPoint = { x: 0, y: 0 };
 
 function resizeCanvasToFillViewport() {
-  const { innerWidth, innerHeight } = window;
-  canvasElement.width = innerWidth;
-  canvasElement.height = innerHeight;
+  canvasElement.width = window.innerWidth;
+  canvasElement.height = window.innerHeight;
 }
 
 function clearCanvas({
@@ -81,11 +211,23 @@ function drawMap() {
   });
 
   const windowBounds = computeWindowBounds();
-  const visibleVertices = computeVisibleVertices(windowBounds);
+  const viewportBounds = computeViewportBounds();
+  const verticesInWindow = computeVisibleVertices(windowBounds);
 
-  visibleVertices.forEach(([x, y]) => {
-    drawVertex(x, y);
-  });
+  verticesInWindow
+    .map((vertex) =>
+      windowToViewportCoordinates({
+        windowCoordinates: vertex,
+        windowBounds,
+        viewportBounds,
+      })
+    )
+    .forEach((vertex, index) => {
+      drawVertex(
+        vertex,
+        `(${verticesInWindow[index].x}, ${verticesInWindow[index].y})`
+      );
+    });
 }
 
 function onWindowResize() {
@@ -96,49 +238,16 @@ function onWindowResize() {
 onWindowResize();
 window.addEventListener("resize", onWindowResize);
 
-// given the canvas' dimensions (and eventually the zoom level)
-// determine which vertices (could be a tuple) are visible and return them?
-
-// I NEED A SUB-CELL_SIZE FOCAL POINT UNIT
-
-// which map units are visible?  Which map units 'require' vertices?
-// for now, the map units are 1:1 with the viewport units
-// so focalPoint.x - canvas.width / 2 is the min x
-// a function that determines the minx, miny, maxx and maxy of the window
-// { x: -3 }
-function computeWindowBounds() {
-  // the window bounds are the bounds of the visible part of the map
-  // in other words, this is where the first conversion from viewport to map takes place?
-  // we know the viewport dimensions, then we want to translate those to the map coordinates
-  const halfCanvasWidth = canvasElement.offsetWidth / 2;
-  const halfCanvasHeight = canvasElement.offsetHeight / 2;
-
-  return {
-    // -3 - 720 = -723
-    // -3 - 720 = -717
-    minX: -halfCanvasWidth - focalPoint.x,
-    maxX: halfCanvasWidth - focalPoint.x,
-    minY: -halfCanvasHeight - focalPoint.y,
-    maxY: halfCanvasHeight - focalPoint.y,
-  };
-}
-
-// find min-max x and min-max y of map
+// TODO: get rid of magic numbers here!!!
 function computeVisibleVertices(windowBounds: {
   minX: number;
   minY: number;
   maxX: number;
   maxY: number;
 }) {
-  // I think we actually want the COORDINATES of the top-left and bottom-right corners of the window
-  // then we can determine exactly what vertices are within that range
-  // this is to say... we need to now figure out which vertices fall within these things...
   // do we have some sort of 'list' of all existing vertices?
   // or do we know that they follow some pattern (every 100th thing?)
   // for now, let's do the pattern following
-
-  // find the first value that is greater than the minX to draw a vertex at
-  // this also requires that we look at the minY to try and find out where the first vertex is there...
 
   // TODO: think about the behavior of this rounding
   const firstValidXValue = Math.round(windowBounds.minX / 100) * 100;
@@ -146,32 +255,24 @@ function computeVisibleVertices(windowBounds: {
   const firstValidYValue = Math.round(windowBounds.minY / 100) * 100;
 
   // these are vertices relative to the focal point...
-  const vertices: Array<[number, number]> = [];
+  const vertices: Array<Coordinates> = [];
 
   for (let x = firstValidXValue; x <= windowBounds.maxX; x += 100) {
     for (let y = firstValidYValue; y <= windowBounds.maxY; y += 100) {
-      vertices.push([x, y]);
+      vertices.push({ x, y });
     }
   }
 
   return vertices;
 }
 
-// FOR NOW: 1px = 1/100 of a degree long/lat
-// that means to convert focal point to long/lat, we have to divide each one by 100
-
-// Run with the idea of translating between MAP units and VIEWPORT Units
-// right now they can be 1:1
 onDrag({
   draggableElement: canvasElement,
   dragThreshold: 3,
   callback: (delta) => {
-    // the deltas are in pixel values...
-    // the focalPoint is in map units...
-    // right now this is a 1:1 translation...
-    // but
-    focalPoint.y -= delta.y;
-    focalPoint.x -= delta.x;
+    // TODO: are these correctly scaled from viewport to map units?
+    focalPoint.y += delta.y / SCALE_FACTOR;
+    focalPoint.x += delta.x / SCALE_FACTOR;
     drawMap();
   },
 });
